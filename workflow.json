@@ -1,0 +1,281 @@
+{
+  "name": "Email Calendar Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -80,
+        -80
+      ],
+      "id": "725e1f48-deb8-4a0e-af99-bcc3c538bb90",
+      "name": "Get a message",
+      "webhookId": "85add921-aca0-4074-b11f-45ed61252e4e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LlNpgVdYVeDLr2DV",
+          "name": "use this"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=To:\n{{ $json.To }}\nSubject Line:\n{{ $json.Subject }}\nEmail Body:\n{{ $json.snippet }}\n",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=\nYou are an email assistant.\nToday is: {{ $now.format(\"YYYY-MM-DD\") }}\n\nAnalyze the following email:\n{{ $json.snippet }}\n\n\n\nYour tasks:\n1. Extract meeting details (date, time, location, sender) from the email.\n2. Determine if this is a new meeting invite, not a duplicate or update.\n3. Check the user’s availability using the calendar data.\n4. Write what the reply to the email should be.\n5. Decide whether a new calendar event must be created.\n6. Output ONLY a JSON object in this exact structure:\n\n{\n \"About\": \"short summary (1–3 words)\",\n \"response\": \"email reply\",\n \"update_calendar\": \"new event\" or \"no event\",\n \"date\": \"date mentioned in the email\"\n}\nupdate_calenda : you need to check in calendar whether the event is present or not if not say :\"new event\" or its present say :\"no event \".\n\nDo NOT output anything except this JSON object.\nEnsure your response corresponds to the provided email: {{ $json.snippet }}.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        128,
+        -80
+      ],
+      "id": "20ddd566-ec34-4097-ad15-5bb559979224",
+      "name": "AI Agent",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        16,
+        144
+      ],
+      "id": "1ee6cd8d-2fd6-460b-8ab7-8064e889d49f",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "MYxaE8Klll7pptuV",
+          "name": "use gemini"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "searches event in Google calendar",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "thejohnwick540@gmail.com",
+          "mode": "list",
+          "cachedResultName": "thejohnwick540@gmail.com"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        304,
+        144
+      ],
+      "id": "45eeb096-cbda-417a-82b4-4cd094ab2fe4",
+      "name": "search event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "JB6VqA0jGZbQ1623",
+          "name": "use this"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "thejohnwick540@gmail.com",
+          "mode": "list",
+          "cachedResultName": "thejohnwick540@gmail.com"
+        },
+        "start": "={{ $json.output.date ? new Date(($json.output.date).split('/')[2] + '-' + ($json.output.date).split('/')[1] + '-' + ($json.output.date).split('/')[0] + 'T00:00:00').toISOString() : $now.toISO() }}",
+        "end": "={{ new Date($json.output.date.split('/').reverse().join('-') + 'T01:00:00').toISOString() }}",
+        "additionalFields": {
+          "summary": "={{ $json.output.About }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        576,
+        32
+      ],
+      "id": "23ac1652-979e-45e1-a078-f8792b2ec5da",
+      "name": "Create an event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "JB6VqA0jGZbQ1623",
+          "name": "use this"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"About\": \"short summary here\",\n  \"response\": \"email reply here\",\n  \"update_calendar\": \"new event\",\n  \"date\": \"2025-02-10\"\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        448,
+        144
+      ],
+      "id": "39e79d54-539f-48a6-aaad-18f6e2d0275d",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{ $('AI Agent').item.json.output.About }}",
+        "message": "={{ $('AI Agent').item.json.output.response }}",
+        "options": {
+          "threadId": "={{ $('Get a message').item.json.id }}",
+          "sendTo": "={{ $('Get a message').item.json.From }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        560,
+        -160
+      ],
+      "id": "446723fb-e653-40dc-8d65-bb81c5602339",
+      "name": "Create a draft",
+      "webhookId": "06dd8a07-e4de-43fd-b28a-c948a9374855",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LlNpgVdYVeDLr2DV",
+          "name": "use this"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -288,
+        -80
+      ],
+      "id": "eb989849-abf3-49fc-981c-5443366fa637",
+      "name": "watching email",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "LlNpgVdYVeDLr2DV",
+          "name": "use this"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get a message": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search event": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Create a draft",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create an event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create an event": {
+      "main": [
+        []
+      ]
+    },
+    "Create a draft": {
+      "main": [
+        []
+      ]
+    },
+    "watching email": {
+      "main": [
+        [
+          {
+            "node": "Get a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3ce7faec-e448-4d1e-a261-320e60ec0af3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cf536de71349f522d5c6970e9df944a3ea69ea5a5c0432d808c0ed67783306c4"
+  },
+  "id": "ZfBpDOYscr8UlIr9",
+  "tags": []
+}
